@@ -12,7 +12,7 @@
 
 /dts-v1/;
 
-#include "msm8610-otus-common.dtsi"
+/include/ "msm8610-otus-common.dtsi"
 
 / {
 	qcom,msm-id = <147 0x45 0x82B0>;
