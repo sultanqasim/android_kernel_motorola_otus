@@ -1,0 +1,11 @@
+Upstream Info:
+Source code is from CyanogenMod's 8610 source at
+https://github.com/CyanogenMod/android_kernel_motorola_msm8610/tree/cm-12.0
+
+How to build:
+export ARCH=arm
+export SUBARCH=arm
+export CROSS_COMPILE=arm-linux-gnueabihf-
+make mrproper
+make msm8610-mini_defconfig
+make -j10
