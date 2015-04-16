@@ -12,14 +12,8 @@
 
 /dts-v1/;
 
-#include "msm8610-v2.dtsi"
-#include "msm8610-mtp.dtsi"
-#include "msm8610-camera-sensor-cdp-mtp.dtsi"
+#include "msm8610-otus-common.dtsi"
 
 / {
-	model = "Qualcomm MSM 8610v2 MTP";
-	compatible = "qcom,msm8610-mtp", "qcom,msm8610", "qcom,mtp";
-	qcom,board-id = <8 0>;
+	qcom,msm-id = <147 0x45 0x82B0>;
 };
-
-

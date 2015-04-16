@@ -11,12 +11,12 @@
  * GNU General Public License for more details.
  */
 
-/include/ "msm8610-moto-gpiomux.dtsi"
-/include/ "msm8610-camera-sensor-moto.dtsi"
-/include/ "dsi-panel-mot-tianma-qhd-video.dtsi"
-/include/ "dsi-panel-mot-inx-qhd-video.dtsi"
-/include/ "dsi-panel-mot-dummy-qhd-video.dtsi"
-/include/ "carrier-channel-ids.dtsi"
+#include "msm8610-moto-gpiomux.dtsi"
+#include "msm8610-camera-sensor-moto.dtsi"
+#include "dsi-panel-mot-tianma-qhd-video.dtsi"
+#include "dsi-panel-mot-inx-qhd-video.dtsi"
+#include "dsi-panel-mot-dummy-qhd-video.dtsi"
+#include "carrier-channel-ids.dtsi"
 
 / {
 	model = "Motorola QC-MSM8610";
@@ -179,9 +179,9 @@
 		qcom,vref-batt-therm-uv = <1800000>;
 		qcom,default-kohm = <20>;
 
-		/include/ "batterydata-el40-lishen.dtsi"
-		/include/ "batterydata-el40-sony.dtsi"
-		/include/ "batterydata-el40-atl.dtsi"
+		#include "batterydata-el40-lishen.dtsi"
+		#include "batterydata-el40-sony.dtsi"
+		#include "batterydata-el40-atl.dtsi"
 	};
 
 	alsa_to_h2w {
