@@ -1482,6 +1482,25 @@ kernelrelease:
 kernelversion:
 	@echo $(KERNELVERSION)
 
+
+# Device tree image
+# --------------------------------------------------------------------------
+DTBTOOL := tools/dtbtool/dtbtool
+$(DTBTOOL):
+	        make -C tools/dtbtool
+
+DEVTREE := arch/arm/boot/dt.img
+BOARD_KERNEL_PAGESIZE := 2048
+
+.PHONY: dtimage
+dtimage: $(DEVTREE)
+
+$(DEVTREE): dtbs $(DTBTOOL)
+	$(call pretty,"Target dt image: $(DEVTREE)")
+	$(DTBTOOL) -o $@ -s $(BOARD_KERNEL_PAGESIZE) -p scripts/dtc/ arch/arm/boot/
+	chmod a+r $@
+
+
 # Single targets
 # ---------------------------------------------------------------------------
 # Single targets are compatible with:
