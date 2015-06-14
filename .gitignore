@@ -84,3 +84,7 @@ GTAGS
 *.orig
 *~
 \#*#
+
+# squid build stuff
+squid_install/*
+cwm_flash_zip/boot.img

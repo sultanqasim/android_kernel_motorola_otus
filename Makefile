@@ -22,6 +22,10 @@ LC_COLLATE=C
 LC_NUMERIC=C
 export LC_COLLATE LC_NUMERIC
 
+# Added by SQK
+TOP := $(dir $(lastword $(MAKEFILE_LIST)))
+print-%  : ; @echo $* = $($*)
+
 # We are using a recursive build, so we need to do a little thinking
 # to get the ordering right.
 #
@@ -1232,6 +1236,16 @@ package-dir	:= $(srctree)/scripts/package
 	$(Q)$(MAKE) $(build)=$(package-dir) $@
 rpm: include/config/kernel.release FORCE
 	$(Q)$(MAKE) $(build)=$(package-dir) $@
+
+# Android boot.img builder
+# --------------------------------------------------------------------------
+ifeq "$(TOP)" "./"
+    ifeq ($(VARIANT),)
+        $(info VARIANT not specified. Not loading bootimage building rules.)
+    else
+        include bootimage.mk
+    endif
+endif
 
 
 # Brief documentation of the typical targets used
