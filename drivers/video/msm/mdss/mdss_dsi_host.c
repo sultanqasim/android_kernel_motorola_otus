@@ -1088,6 +1088,7 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 			pr_err("unable to map dma memory to iommu(%d)\n", ret);
 			return -ENOMEM;
 		}
+		ctrl->dmap_iommu_map = true;
 	} else {
 		addr = tp->dmap;
 	}
@@ -1124,9 +1125,11 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	else
 		ret = tp->len;
 
-	if (is_mdss_iommu_attached())
+	if (ctrl->dmap_iommu_map) {
 		msm_iommu_unmap_contig_buffer(addr,
 			mdss_get_iommu_domain(domain), 0, size);
+		ctrl->dmap_iommu_map = false;
+	}
 
 	return ret;
 }
@@ -1528,9 +1531,11 @@ irqreturn_t mdss_dsi_isr(int irq, void *ptr)
 			(struct mdss_dsi_ctrl_pdata *)ptr;
 	struct mdss_dsi_ctrl_pdata *mctrl = NULL;
 
-	if (!ctrl->ctrl_base)
+	if (!ctrl->ctrl_base) {
 		pr_err("%s:%d DSI base adr no Initialized",
-				       __func__, __LINE__);
+						__func__, __LINE__);
+		return IRQ_HANDLED;
+	}
 
 	isr = MIPI_INP(ctrl->ctrl_base + 0x0110);/* DSI_INTR_CTRL */
 	MIPI_OUTP(ctrl->ctrl_base + 0x0110, isr);
