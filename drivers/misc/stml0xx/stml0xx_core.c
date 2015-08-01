@@ -65,7 +65,7 @@ unsigned short stml0xx_g_mag_delay;
 unsigned short stml0xx_g_gyro_delay;
 unsigned short stml0xx_g_baro_delay;
 unsigned long stml0xx_g_nonwake_sensor_state;
-unsigned short stml0xx_g_wake_sensor_state;
+unsigned long stml0xx_g_wake_sensor_state;
 unsigned short stml0xx_g_algo_state;
 unsigned char stml0xx_g_motion_dur;
 unsigned char stml0xx_g_zmotion_dur;
@@ -1043,7 +1043,7 @@ static int stml0xx_resume(struct device *dev)
 	static struct stml0xx_work_struct *stm_ws;
 	struct stml0xx_data *ps_stml0xx = spi_get_drvdata(to_spi_device(dev));
 
-	getrawmonotonic(&ts);
+	get_monotonic_boottime(&ts);
 	dev_dbg(&stml0xx_misc_data->spi->dev, "%s", __func__);
 
 	mutex_lock(&ps_stml0xx->lock);
