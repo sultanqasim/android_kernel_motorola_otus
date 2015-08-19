@@ -2,15 +2,27 @@ ui_print("Squid Kernel for Moto E 3G (otus)");
 
 assert(getprop("ro.product.device") == "otus" || getprop("ro.product.device") == "otus_ds" || abort("This package is for device: otus,otus_ds; this device is " + getprop("ro.product.device") + "."););
 
-ui_print("Mount /System Folder...");
-run_program("/sbin/busybox", "mount", "/system");
+ui_print("Extracting flashing tools...");
+package_extract_dir("tools", "/tmp");
+set_perm(0, 0, 0777, "/tmp/mkbootimg");
+set_perm(0, 0, 0777, "/tmp/unpackbootimg");
+set_perm(0, 0, 0777, "/tmp/flash_kernel.sh");
 
-ui_print("Extracting System Files...");
+ui_print("Building and installing boot image...");
+run_program("/tmp/flash_kernel.sh");
+
+ui_print("Cleaning up flashing tools...");
+delete("/tmp/boot.img");
+delete("/tmp/mkbootimg");
+delete("/tmp/unpackbootimg");
+delete("/tmp/flash_kernel.sh");
+
+ui_print("Installing kernel modules...");
+mount("ext4", "EMMC", "/dev/block/bootdevice/by-name/system", "/system");
 package_extract_dir("system", "/system");
 set_perm_recursive(0, 0, 0755, 0644, "/system/lib/modules");
-
-ui_print("Extracting Kernel files...");
-package_extract_file("boot.img", "/dev/block/platform/msm_sdcc.1/by-name/boot");
+symlink("/system/lib/modules/pronto/pronto_wlan.ko", "/system/lib/modules/wlan.ko");
+unmount("/system");
 
 ui_print("Kernel Installation Completed!");
 show_progress(0.100000, 0);

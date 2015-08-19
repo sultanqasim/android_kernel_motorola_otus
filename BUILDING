@@ -6,7 +6,6 @@ How to build:
 export ARCH=arm
 export SUBARCH=arm
 export CROSS_COMPILE=arm-linux-gnueabihf-
-export VARIANT=cm-12.1
 make mrproper
 make cm_otus_defconfig
 ./build_cwm_zip.sh

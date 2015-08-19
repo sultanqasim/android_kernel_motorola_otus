@@ -1237,14 +1237,10 @@ package-dir	:= $(srctree)/scripts/package
 rpm: include/config/kernel.release FORCE
 	$(Q)$(MAKE) $(build)=$(package-dir) $@
 
-# Android boot.img builder
+# dt image builder
 # --------------------------------------------------------------------------
 ifeq "$(TOP)" "./"
-    ifeq ($(VARIANT),)
-        $(info VARIANT not specified. Not loading bootimage building rules.)
-    else
-        include bootimage.mk
-    endif
+include bootimage.mk
 endif
 
 
