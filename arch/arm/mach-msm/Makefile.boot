@@ -226,7 +226,7 @@ endif
 dtb-$(CONFIG_ARCH_MSM8610)	+= msm8610-condor-p2b.dtb
 dtb-$(CONFIG_ARCH_MSM8610)	+= msm8610-condor-p2b1.dtb
 #dtb-$(CONFIG_ARCH_MSM8610)	+= msm8610-otus-p1.dtb
-dtb-$(CONFIG_ARCH_MSM8610)	+= msm8610-otus-p2.dtb
+#dtb-$(CONFIG_ARCH_MSM8610)	+= msm8610-otus-p2.dtb
 dtb-$(CONFIG_ARCH_MSM8610)	+= msm8610-otus-p2b.dtb
 
 # MSMSAMARIUM
