@@ -609,10 +609,16 @@ static void handle_event_change(enum command_response cmd, void *data)
 		} else {
 			dprintk(VIDC_DBG,
 				"V4L2_EVENT_SEQ_CHANGED_SUFFICIENT\n");
-			inst->prop.height[CAPTURE_PORT] = event_notify->height;
-			inst->prop.width[CAPTURE_PORT] = event_notify->width;
-			if (!msm_comm_get_stream_output_mode(inst) ==
+			if (msm_comm_get_stream_output_mode(inst) !=
 				HAL_VIDEO_DECODER_SECONDARY) {
+				dprintk(VIDC_DBG,
+					"event_notify->height = %d event_notify->width = %d\n",
+					event_notify->height,
+					event_notify->width);
+				inst->prop.height[CAPTURE_PORT] =
+					event_notify->height;
+				inst->prop.width[CAPTURE_PORT] =
+					event_notify->width;
 				inst->prop.height[OUTPUT_PORT] =
 					event_notify->height;
 				inst->prop.width[OUTPUT_PORT] =
@@ -2116,7 +2122,7 @@ static int set_output_buffers(struct msm_vidc_inst *inst,
 	int rc = 0;
 	struct msm_smem *handle;
 	struct internal_buf *binfo;
-	struct vidc_buffer_addr_info buffer_info;
+	struct vidc_buffer_addr_info buffer_info = {0};
 	u32 smem_flags = 0, buffer_size;
 	struct hal_buffer_requirements *output_buf, *extradata_buf;
 	int i;
@@ -2136,19 +2142,21 @@ static int set_output_buffers(struct msm_vidc_inst *inst,
 		output_buf->buffer_count_actual,
 		output_buf->buffer_size);
 
+	buffer_size = output_buf->buffer_size;
+
 	extradata_buf = get_buff_req_buffer(inst, HAL_BUFFER_EXTRADATA_OUTPUT);
-	if (!extradata_buf) {
+	if (extradata_buf) {
+		dprintk(VIDC_DBG,
+			"extradata: num = %d, size = %d\n",
+			extradata_buf->buffer_count_actual,
+			extradata_buf->buffer_size);
+		buffer_size += extradata_buf->buffer_size;
+	} else {
 		dprintk(VIDC_DBG,
 			"This extradata buffer not required, buffer_type: %x\n",
 			buffer_type);
-		return 0;
 	}
-	dprintk(VIDC_DBG,
-		"extradata: num = %d, size = %d\n",
-		extradata_buf->buffer_count_actual,
-		extradata_buf->buffer_size);
 
-	buffer_size = output_buf->buffer_size + extradata_buf->buffer_size;
 	if (inst->flags & VIDC_SECURE)
 		smem_flags |= SMEM_SECURE;
 
@@ -2186,7 +2194,10 @@ static int set_output_buffers(struct msm_vidc_inst *inst,
 			buffer_info.align_device_addr = handle->device_addr;
 			buffer_info.extradata_addr = handle->device_addr +
 				output_buf->buffer_size;
-			buffer_info.extradata_size = extradata_buf->buffer_size;
+			if (extradata_buf) {
+				buffer_info.extradata_size =
+					extradata_buf->buffer_size;
+			}
 			dprintk(VIDC_DBG, "Output buffer address: %x",
 					buffer_info.align_device_addr);
 			dprintk(VIDC_DBG, "Output extradata address: %x",
@@ -2550,13 +2561,6 @@ int msm_comm_qbuf(struct vb2_buffer *vb)
 			mutex_unlock(&inst->sync_lock);
 	} else {
 		int64_t time_usec = timeval_to_ns(&vb->v4l2_buf.timestamp);
-
-		rc = msm_vidc_check_session_supported(inst);
-		if (rc) {
-			dprintk(VIDC_ERR,
-				"%s: session not supported\n", __func__);
-			goto err_no_mem;
-		}
 		do_div(time_usec, NSEC_PER_USEC);
 		memset(&frame_data, 0 , sizeof(struct vidc_frame_data));
 		frame_data.alloc_len = vb->v4l2_planes[0].length;
@@ -3448,19 +3452,25 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 				capability->height.min);
 			rc = -ENOTSUPP;
 		}
-		if (!rc) {
-			rc = call_hfi_op(hdev, capability_check,
-				inst->fmts[OUTPUT_PORT]->fourcc,
+		if (msm_vp8_low_tier &&
+			inst->fmts[OUTPUT_PORT]->fourcc == V4L2_PIX_FMT_VP8) {
+			capability->width.max = DEFAULT_WIDTH;
+			capability->width.max = DEFAULT_HEIGHT;
+		}
+		if (!rc && (inst->prop.width[CAPTURE_PORT] >
+			capability->width.max)) {
+			dprintk(VIDC_ERR,
+				"Unsupported width = %u supported max width = %u\n",
 				inst->prop.width[CAPTURE_PORT],
-				&capability->width.max,
-				&capability->height.max);
+				capability->width.max);
+				rc = -ENOTSUPP;
 		}
 
 		if (!rc && (inst->prop.height[CAPTURE_PORT]
 			* inst->prop.width[CAPTURE_PORT] >
 			capability->width.max * capability->height.max)) {
 			dprintk(VIDC_ERR,
-			"Unsupported WxH = (%u)x(%u), Max supported is - (%u)x(%u)",
+			"Unsupported WxH = (%u)x(%u), Max supported is - (%u)x(%u)\n",
 			inst->prop.width[CAPTURE_PORT],
 			inst->prop.height[CAPTURE_PORT],
 			capability->width.max, capability->height.max);
