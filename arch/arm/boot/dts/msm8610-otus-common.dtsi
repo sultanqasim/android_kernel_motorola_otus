@@ -223,7 +223,6 @@
 
 	sound {
 		/delete-property/ qcom,ext-spk-amp-gpio;
-		/delete-property/ boost-supply;
 	};
 
 	dummy_vreg: dummy_vreg {
