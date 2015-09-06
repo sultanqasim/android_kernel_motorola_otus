@@ -1517,26 +1517,17 @@ static int mem_cgroup_count_children(struct mem_cgroup *memcg)
 u64 mem_cgroup_get_limit(struct mem_cgroup *memcg)
 {
 	u64 limit;
+	u64 memsw;
 
 	limit = res_counter_read_u64(&memcg->res, RES_LIMIT);
+	limit += total_swap_pages << PAGE_SHIFT;
 
+	memsw = res_counter_read_u64(&memcg->memsw, RES_LIMIT);
 	/*
-	 * Do not consider swap space if we cannot swap due to swappiness
+	 * If memsw is finite and limits the amount of swap space available
+	 * to this memcg, return that limit.
 	 */
-	if (mem_cgroup_swappiness(memcg)) {
-		u64 memsw;
-
-		limit += total_swap_pages << PAGE_SHIFT;
-		memsw = res_counter_read_u64(&memcg->memsw, RES_LIMIT);
-
-		/*
-		 * If memsw is finite and limits the amount of swap space
-		 * available to this memcg, return that limit.
-		 */
-		limit = min(limit, memsw);
-	}
-
-	return limit;
+	return min(limit, memsw);
 }
 
 static unsigned long mem_cgroup_reclaim(struct mem_cgroup *memcg,

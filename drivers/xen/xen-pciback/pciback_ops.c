@@ -113,8 +113,7 @@ void xen_pcibk_reset_device(struct pci_dev *dev)
 		if (dev->msi_enabled)
 			pci_disable_msi(dev);
 #endif
-		if (pci_is_enabled(dev))
-			pci_disable_device(dev);
+		pci_disable_device(dev);
 
 		pci_write_config_word(dev, PCI_COMMAND, 0);
 

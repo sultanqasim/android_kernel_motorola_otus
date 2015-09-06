@@ -526,7 +526,9 @@ static int ceph_x_handle_reply(struct ceph_auth_client *ac, int result,
 
 static int ceph_x_create_authorizer(
 	struct ceph_auth_client *ac, int peer_type,
-	struct ceph_auth_handshake *auth)
+	struct ceph_authorizer **a,
+	void **buf, size_t *len,
+	void **reply_buf, size_t *reply_len)
 {
 	struct ceph_x_authorizer *au;
 	struct ceph_x_ticket_handler *th;
@@ -546,12 +548,11 @@ static int ceph_x_create_authorizer(
 		return ret;
 	}
 
-	auth->authorizer = (struct ceph_authorizer *) au;
-	auth->authorizer_buf = au->buf->vec.iov_base;
-	auth->authorizer_buf_len = au->buf->vec.iov_len;
-	auth->authorizer_reply_buf = au->reply_buf;
-	auth->authorizer_reply_buf_len = sizeof (au->reply_buf);
-
+	*a = (struct ceph_authorizer *)au;
+	*buf = au->buf->vec.iov_base;
+	*len = au->buf->vec.iov_len;
+	*reply_buf = au->reply_buf;
+	*reply_len = sizeof(au->reply_buf);
 	return 0;
 }
 
