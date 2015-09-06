@@ -2141,7 +2141,6 @@ static void mmc_blk_rw_rq_prep(struct mmc_queue_req *mqrq,
 	}
 
 	mqrq->mmc_active.mrq = &brq->mrq;
-	mqrq->mmc_active.cmd_flags = req->cmd_flags;
 	if (mq->err_check_fn)
 		mqrq->mmc_active.err_check = mq->err_check_fn;
 	else
@@ -2563,7 +2562,6 @@ static void mmc_blk_packed_hdr_wrq_prep(struct mmc_queue_req *mqrq,
 	brq->data.sg_len = mmc_queue_map_sg(mq, mqrq);
 
 	mqrq->mmc_active.mrq = &brq->mrq;
-	mqrq->mmc_active.cmd_flags = req->cmd_flags;
 
 	/*
 	 * This is intended for packed commands tests usage - in case these
@@ -2738,7 +2736,6 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 			set_bit(MMC_QUEUE_URGENT_REQUEST, &mq->flags);
 			ret = 0;
 			break;
-		case MMC_BLK_URGENT_DONE:
 		case MMC_BLK_SUCCESS:
 		case MMC_BLK_PARTIAL:
 			/*

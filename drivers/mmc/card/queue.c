@@ -107,7 +107,6 @@ static int mmc_queue_thread(void *d)
 				break;
 			}
 			mmc_start_delayed_bkops(card);
-			mq->card->host->context_info.is_urgent = false;
 			up(&mq->thread_sem);
 			schedule();
 			down(&mq->thread_sem);
@@ -182,7 +181,7 @@ static void mmc_urgent_request(struct request_queue *q)
 	spin_lock_irqsave(&cntx->lock, flags);
 
 	/* do stop flow only when mmc thread is waiting for done */
-	if (mq->mqrq_cur->req || mq->mqrq_prev->req) {
+	if (cntx->is_waiting) {
 		/*
 		 * Urgent request must be executed alone
 		 * so disable the write packing
