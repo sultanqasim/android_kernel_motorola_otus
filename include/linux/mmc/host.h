@@ -150,8 +150,6 @@ struct mmc_host_ops {
 	unsigned long (*get_max_frequency)(struct mmc_host *host);
 	unsigned long (*get_min_frequency)(struct mmc_host *host);
 	int	(*notify_load)(struct mmc_host *, enum mmc_load);
-	int	(*stop_request)(struct mmc_host *host);
-	unsigned int	(*get_xfer_remain)(struct mmc_host *host);
 };
 
 struct mmc_card;
@@ -165,25 +163,13 @@ struct mmc_async_req {
 	 * Returns 0 if success otherwise non zero.
 	 */
 	int (*err_check) (struct mmc_card *, struct mmc_async_req *);
-	/* Reinserts request back to the block layer */
-	void (*reinsert_req) (struct mmc_async_req *);
-	/* update what part of request is not done (packed_fail_idx) */
-	int (*update_interrupted_req) (struct mmc_card *,
-			struct mmc_async_req *);
 };
 
 /**
  * mmc_context_info - synchronization details for mmc context
  * @is_done_rcv		wake up reason was done request
  * @is_new_req		wake up reason was new request
- * @is_waiting_last_req	is true, when 1 request running on the bus and
- *			NULL fetched as second request. MMC_BLK_NEW_REQUEST
- *			notification will wake up mmc thread from waiting.
- * @is_urgent		wake up reason was urgent request
- * @is_waiting		is true, when first request is running on the bus,
- *			second request preparation started or mmc thread is
- *			waiting for the completion of the current request
- *			(latter case is like @is_waiting_last_req)
+ * @is_waiting_last_req	mmc context waiting for single running request
  * @wait		wait queue
  * @lock		lock to protect data fields
  */
@@ -191,8 +177,6 @@ struct mmc_context_info {
 	bool			is_done_rcv;
 	bool			is_new_req;
 	bool			is_waiting_last_req;
-	bool			is_urgent;
-	bool			is_waiting;
 	wait_queue_head_t	wait;
 	spinlock_t		lock;
 };

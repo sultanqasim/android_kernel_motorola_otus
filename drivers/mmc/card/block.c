@@ -1797,151 +1797,6 @@ static int mmc_blk_err_check(struct mmc_card *card,
 	return MMC_BLK_SUCCESS;
 }
 
-/*
- * mmc_blk_reinsert_req() - re-insert request back to the scheduler
- * @areq:	request to re-insert.
- *
- * Request may be packed or single. When fails to reinsert request, it will be
- * requeued to the the dispatch queue.
- */
-static void mmc_blk_reinsert_req(struct mmc_async_req *areq)
-{
-	struct request *prq;
-	int ret = 0;
-	struct mmc_queue_req *mq_rq;
-	struct request_queue *q;
-
-	mq_rq = container_of(areq, struct mmc_queue_req, mmc_active);
-	q = mq_rq->req->q;
-	if (mq_rq->packed_cmd != MMC_PACKED_NONE) {
-		while (!list_empty(&mq_rq->packed_list)) {
-			/* return requests in reverse order */
-			prq = list_entry_rq(mq_rq->packed_list.prev);
-			list_del_init(&prq->queuelist);
-			spin_lock_irq(q->queue_lock);
-			ret = blk_reinsert_request(q, prq);
-			if (ret) {
-				blk_requeue_request(q, prq);
-				spin_unlock_irq(q->queue_lock);
-				goto reinsert_error;
-			}
-			spin_unlock_irq(q->queue_lock);
-		}
-	} else {
-		spin_lock_irq(q->queue_lock);
-		ret = blk_reinsert_request(q, mq_rq->req);
-		if (ret)
-			blk_requeue_request(q, mq_rq->req);
-		spin_unlock_irq(q->queue_lock);
-	}
-	return;
-
-reinsert_error:
-	pr_err("%s: blk_reinsert_request() failed (%d)",
-			mq_rq->req->rq_disk->disk_name, ret);
-	/*
-	 * -EIO will be reported for this request and rest of packed_list.
-	 *  Urgent request will be proceeded anyway, while upper layer
-	 *  responsibility to re-send failed requests
-	 */
-	while (!list_empty(&mq_rq->packed_list)) {
-		prq = list_entry_rq(mq_rq->packed_list.next);
-		list_del_init(&prq->queuelist);
-		spin_lock_irq(q->queue_lock);
-		blk_requeue_request(q, prq);
-		spin_unlock_irq(q->queue_lock);
-	}
-}
-
-/*
- * mmc_blk_update_interrupted_req() - update of the stopped request
- * @card:	the MMC card associated with the request.
- * @areq:	interrupted async request.
- *
- * Get stopped request state from card and update successfully done part of
- * the request by setting packed_fail_idx.  The packed_fail_idx is index of
- * first uncompleted request in packed request list, for non-packed request
- * packed_fail_idx remains unchanged.
- *
- * Returns: MMC_BLK_SUCCESS for success, MMC_BLK_ABORT otherwise
- */
-static int mmc_blk_update_interrupted_req(struct mmc_card *card,
-					struct mmc_async_req *areq)
-{
-	int ret = MMC_BLK_SUCCESS;
-	u8 *ext_csd;
-	int retry, status, err;
-	int correctly_done;
-	struct mmc_queue_req *mq_rq = container_of(areq, struct mmc_queue_req,
-				      mmc_active);
-	struct request *prq;
-	u8 req_index = 0;
-
-	if (mq_rq->packed_cmd == MMC_PACKED_NONE)
-		return MMC_BLK_SUCCESS;
-
-	ext_csd = kmalloc(512, GFP_KERNEL);
-	if (!ext_csd)
-		return MMC_BLK_ABORT;
-
-	/* get correctly programmed sectors number from card */
-	for (retry = 2; retry >= 0; retry--) {
-		ret = mmc_send_ext_csd(card, ext_csd);
-		if (!ret)
-			break;
-		pr_err("%s: error %d reading correctly programmed sectors, %sing\n",
-		       mq_rq->req->rq_disk->disk_name, ret,
-		       retry ? "retry" : "abort");
-		err = get_card_status(card, &status, 0);
-		if (err)
-			pr_err("%s: error %d sending status command\n",
-			       mq_rq->req->rq_disk->disk_name, err);
-		else
-			pr_err("%s: card status: 0x%X\n",
-			       mq_rq->req->rq_disk->disk_name, status);
-
-		if (R1_CURRENT_STATE(status) == R1_STATE_DATA ||
-		    R1_CURRENT_STATE(status) == R1_STATE_RCV) {
-			err = send_stop(card, &status);
-			if (err) {
-				pr_err("%s: error %d sending stop command; status: 0x%X\n",
-				       mq_rq->req->rq_disk->disk_name, err,
-				       status);
-				break;
-			}
-		}
-	}
-	if (ret) {
-		ret = MMC_BLK_ABORT;
-		goto exit;
-	}
-	correctly_done = card->ext_csd.data_sector_size *
-		(ext_csd[EXT_CSD_CORRECTLY_PRG_SECTORS_NUM + 0] << 0 |
-		 ext_csd[EXT_CSD_CORRECTLY_PRG_SECTORS_NUM + 1] << 8 |
-		 ext_csd[EXT_CSD_CORRECTLY_PRG_SECTORS_NUM + 2] << 16 |
-		 ext_csd[EXT_CSD_CORRECTLY_PRG_SECTORS_NUM + 3] << 24);
-
-	/*
-	 * skip packed command header (1 sector) included by the counter but not
-	 * actually written to the NAND
-	 */
-	if (correctly_done >= card->ext_csd.data_sector_size)
-		correctly_done -= card->ext_csd.data_sector_size;
-
-	list_for_each_entry(prq, &mq_rq->packed_list, queuelist) {
-		if ((correctly_done - (int)blk_rq_bytes(prq)) < 0) {
-			/* prq is not successfull */
-			mq_rq->packed_fail_idx = req_index;
-			break;
-		}
-		correctly_done -= blk_rq_bytes(prq);
-		req_index++;
-	}
-exit:
-	kfree(ext_csd);
-	return ret;
-}
-
 static int mmc_blk_packed_err_check(struct mmc_card *card,
 				    struct mmc_async_req *areq)
 {
@@ -2145,9 +2000,6 @@ static void mmc_blk_rw_rq_prep(struct mmc_queue_req *mqrq,
 		mqrq->mmc_active.err_check = mq->err_check_fn;
 	else
 		mqrq->mmc_active.err_check = mmc_blk_err_check;
-	mqrq->mmc_active.reinsert_req = mmc_blk_reinsert_req;
-	mqrq->mmc_active.update_interrupted_req =
-		mmc_blk_update_interrupted_req;
 
 	mmc_queue_bounce_pre(mqrq);
 }
@@ -2575,11 +2427,6 @@ static void mmc_blk_packed_hdr_wrq_prep(struct mmc_queue_req *mqrq,
 	if (mq->packed_test_fn)
 		mq->packed_test_fn(mq->queue, mqrq);
 
-
-	mqrq->mmc_active.reinsert_req = mmc_blk_reinsert_req;
-	mqrq->mmc_active.update_interrupted_req =
-		mmc_blk_update_interrupted_req;
-
 	mmc_queue_bounce_pre(mqrq);
 }
 
@@ -2723,19 +2570,6 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 		mmc_queue_bounce_post(mq_rq);
 
 		switch (status) {
-		case MMC_BLK_URGENT:
-			if (mq_rq->packed_cmd != MMC_PACKED_NONE) {
-				/* complete successfully transmitted part */
-				if (mmc_blk_end_packed_req(mq_rq))
-					/* process for not transmitted part */
-					mmc_blk_reinsert_req(areq);
-			} else {
-				mmc_blk_reinsert_req(areq);
-			}
-
-			set_bit(MMC_QUEUE_URGENT_REQUEST, &mq->flags);
-			ret = 0;
-			break;
 		case MMC_BLK_SUCCESS:
 		case MMC_BLK_PARTIAL:
 			/*
@@ -2935,7 +2769,6 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 	mmc_blk_write_packing_control(mq, req);
 
 	clear_bit(MMC_QUEUE_NEW_REQUEST, &mq->flags);
-	clear_bit(MMC_QUEUE_URGENT_REQUEST, &mq->flags);
 	if (cmd_flags & REQ_SANITIZE) {
 		/* complete ongoing async transfer before issuing sanitize */
 		if (card->host && card->host->areq)
@@ -2965,15 +2798,7 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 	}
 
 out:
-	/*
-	 * packet burst is over, when one of the following occurs:
-	 * - no more requests and new request notification is not in progress
-	 * - urgent notification in progress and current request is not urgent
-	 *   (all existing requests completed or reinserted to the block layer)
-	 */
-	if ((!req && !(test_bit(MMC_QUEUE_NEW_REQUEST, &mq->flags))) ||
-			((test_bit(MMC_QUEUE_URGENT_REQUEST, &mq->flags)) &&
-			 !(cmd_flags & MMC_REQ_NOREINSERT_MASK))) {
+	if (!req && !(test_bit(MMC_QUEUE_NEW_REQUEST, &mq->flags))) {
 		if (mmc_card_need_bkops(card))
 			mmc_start_bkops(card, false);
 		/* release host only when there are no more requests */
