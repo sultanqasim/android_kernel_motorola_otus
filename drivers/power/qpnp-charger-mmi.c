@@ -2546,8 +2546,10 @@ get_prop_capacity(struct qpnp_chg_chip *chip)
 		charger_in = qpnp_chg_is_usb_chg_plugged_in(chip) ||
 			qpnp_chg_is_dc_chg_plugged_in(chip);
 
-		if (ret.intval < chip->soc_resume_limit)
+		if (soc <= chip->soc_resume_limit) {
 			chip->maint_chrg = false;
+			chip->chg_done = false;
+		}
 
 		if (battery_status != POWER_SUPPLY_STATUS_CHARGING
 				&& bms_status != POWER_SUPPLY_STATUS_CHARGING
@@ -3454,14 +3456,15 @@ qpnp_chg_regulator_boost_enable(struct regulator_dev *rdev)
 			pr_err("failed to write SEC_ACCESS rc=%d\n", rc);
 			return rc;
 		}
-
-		rc = qpnp_chg_masked_write(chip,
-			chip->usb_chgpth_base + COMP_OVR1,
-			0xFF,
-			0x2F, 1);
-		if (rc) {
-			pr_err("failed to write COMP_OVR1 rc=%d\n", rc);
-			return rc;
+		if (chip->type != SMBBP) {
+			rc = qpnp_chg_masked_write(chip,
+				chip->usb_chgpth_base + COMP_OVR1,
+				0xFF,
+				0x2F, 1);
+			if (rc) {
+				pr_err("failed to write COMP_OVR1 rc=%d\n", rc);
+				return rc;
+			}
 		}
 	}
 
@@ -3546,16 +3549,16 @@ qpnp_chg_regulator_boost_disable(struct regulator_dev *rdev)
 			pr_err("failed to write SEC_ACCESS rc=%d\n", rc);
 			return rc;
 		}
-
-		rc = qpnp_chg_masked_write(chip,
-			chip->usb_chgpth_base + COMP_OVR1,
-			0xFF,
-			0x00, 1);
-		if (rc) {
-			pr_err("failed to write COMP_OVR1 rc=%d\n", rc);
-			return rc;
+		if (chip->type != SMBBP) {
+			rc = qpnp_chg_masked_write(chip,
+				chip->usb_chgpth_base + COMP_OVR1,
+				0xFF,
+				0x00, 1);
+			if (rc) {
+				pr_err("failed to write COMP_OVR1 rc=%d\n", rc);
+				return rc;
+			}
 		}
-
 		usleep(1000);
 
 		qpnp_chg_usb_suspend_enable(chip, 0);

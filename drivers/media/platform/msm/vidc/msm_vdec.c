@@ -328,6 +328,26 @@ static struct msm_vidc_ctrl msm_vdec_ctrls[] = {
 		.menu_skip_mask = 0,
 		.qmenu = NULL,
 	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY,
+		.name = "Session Priority",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_ENABLE,
+		.maximum = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE,
+		.default_value = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE,
+		.step = 1,
+		.qmenu = NULL,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_OPERATING_RATE,
+		.name = "Set Decoder Operating rate",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 0,
+		.maximum = 300 << 16,  /* 300 fps in Q16 format*/
+		.default_value = 0,
+		.step = 1,
+		.qmenu = NULL,
+	},
 };
 
 #define NUM_CTRLS ARRAY_SIZE(msm_vdec_ctrls)
@@ -912,9 +932,8 @@ int msm_vdec_s_parm(struct msm_vidc_inst *inst, struct v4l2_streamparm *a)
 		dprintk(VIDC_PROF, "reported fps changed for %p: %d->%d\n",
 				inst, inst->prop.fps, fps);
 		inst->prop.fps = fps;
-		mutex_lock(&inst->core->sync_lock);
+
 		msm_comm_scale_clocks_and_bus(inst);
-		mutex_unlock(&inst->core->sync_lock);
 	}
 exit:
 	return rc;
@@ -1263,9 +1282,8 @@ static inline int start_streaming(struct msm_vidc_inst *inst)
 			goto fail_start;
 		}
 	}
-	mutex_lock(&inst->core->sync_lock);
+
 	msm_comm_scale_clocks_and_bus(inst);
-	mutex_unlock(&inst->core->sync_lock);
 
 	rc = msm_comm_try_state(inst, MSM_VIDC_START_DONE);
 	if (rc) {
@@ -1372,9 +1390,7 @@ static int msm_vdec_stop_streaming(struct vb2_queue *q)
 		break;
 	}
 
-	mutex_lock(&inst->core->sync_lock);
 	msm_comm_scale_clocks_and_bus(inst);
-	mutex_unlock(&inst->core->sync_lock);
 
 	if (rc)
 		dprintk(VIDC_ERR,
@@ -1404,7 +1420,7 @@ int msm_vdec_cmd(struct msm_vidc_inst *inst, struct v4l2_decoder_cmd *dec)
 	case V4L2_DEC_QCOM_CMD_FLUSH:
 		if (core->state != VIDC_CORE_INVALID &&
 			inst->state ==  MSM_VIDC_CORE_INVALID) {
-			rc = msm_comm_recover_from_session_error(inst);
+			rc = msm_comm_kill_session(inst);
 			if (rc)
 				dprintk(VIDC_ERR,
 					"Failed to recover from session_error: %d\n",
@@ -1419,7 +1435,7 @@ int msm_vdec_cmd(struct msm_vidc_inst *inst, struct v4l2_decoder_cmd *dec)
 	case V4L2_DEC_CMD_STOP:
 		if (core->state != VIDC_CORE_INVALID &&
 			inst->state ==  MSM_VIDC_CORE_INVALID) {
-			rc = msm_comm_recover_from_session_error(inst);
+			rc = msm_comm_kill_session(inst);
 			if (rc)
 				dprintk(VIDC_ERR,
 					"Failed to recover from session_error: %d\n",
@@ -1747,6 +1763,14 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 			"Limiting input buffer size to :%u\n", ctrl->val);
 		break;
 	}
+	case V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY:
+		property_id = HAL_CONFIG_REALTIME;
+		hal_property.enable = ctrl->val;
+		pdata = &hal_property;
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_OPERATING_RATE:
+		property_id = 0;
+		break;
 	default:
 		break;
 	}
@@ -1820,17 +1844,18 @@ int msm_vdec_g_ctrl(struct msm_vidc_inst *inst, struct v4l2_control *ctrl)
 	return v4l2_g_ctrl(&inst->ctrl_handler, ctrl);
 }
 
-static struct v4l2_ctrl **get_super_cluster(int *size)
+static struct v4l2_ctrl **get_super_cluster(struct msm_vidc_inst *inst,
+				int *size)
 {
 	int c = 0, sz = 0;
 	struct v4l2_ctrl **cluster = kmalloc(sizeof(struct v4l2_ctrl *) *
 			NUM_CTRLS, GFP_KERNEL);
 
-	if (!size || !cluster)
+	if (!size || !cluster || !inst)
 		return NULL;
 
 	for (c = 0; c < NUM_CTRLS; c++)
-		cluster[sz++] = msm_vdec_ctrls[c].priv;
+		cluster[sz++] = inst->ctrls[c];
 
 	*size = sz;
 	return cluster;
@@ -1842,6 +1867,18 @@ int msm_vdec_ctrl_init(struct msm_vidc_inst *inst)
 	struct v4l2_ctrl_config ctrl_cfg = {0};
 	int ret_val = 0;
 	int cluster_size = 0;
+
+	if (!inst) {
+		dprintk(VIDC_ERR, "%s - invalid input\n", __func__);
+		return -EINVAL;
+	}
+
+	inst->ctrls = kzalloc(sizeof(struct v4l2_ctrl *) * NUM_CTRLS,
+				GFP_KERNEL);
+	if (!inst->ctrls) {
+		dprintk(VIDC_ERR, "%s - failed to allocate ctrl\n", __func__);
+		return -ENOMEM;
+	}
 
 	ret_val = v4l2_ctrl_handler_init(&inst->ctrl_handler, NUM_CTRLS);
 
@@ -1895,7 +1932,7 @@ int msm_vdec_ctrl_init(struct msm_vidc_inst *inst)
 		}
 
 
-		msm_vdec_ctrls[idx].priv = ctrl;
+		inst->ctrls[idx] = ctrl;
 	}
 	ret_val = inst->ctrl_handler.error;
 	if (ret_val)
@@ -1904,7 +1941,7 @@ int msm_vdec_ctrl_init(struct msm_vidc_inst *inst)
 			inst->ctrl_handler.error);
 
 	/* Construct a super cluster of all controls */
-	inst->cluster = get_super_cluster(&cluster_size);
+	inst->cluster = get_super_cluster(inst, &cluster_size);
 	if (!inst->cluster || !cluster_size) {
 		dprintk(VIDC_WARN,
 				"Failed to setup super cluster\n");
@@ -1918,6 +1955,12 @@ int msm_vdec_ctrl_init(struct msm_vidc_inst *inst)
 
 int msm_vdec_ctrl_deinit(struct msm_vidc_inst *inst)
 {
+	if (!inst) {
+		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
+		return -EINVAL;
+	}
+
+	kfree(inst->ctrls);
 	kfree(inst->cluster);
 	v4l2_ctrl_handler_free(&inst->ctrl_handler);
 

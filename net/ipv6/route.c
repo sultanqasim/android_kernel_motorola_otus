@@ -936,6 +936,8 @@ struct dst_entry * ip6_route_output(struct net *net, const struct sock *sk,
 {
 	int flags = 0;
 
+	fl6->flowi6_iif = net->loopback_dev->ifindex;
+
 	if ((sk && sk->sk_bound_dev_if) || rt6_need_strict(&fl6->daddr))
 		flags |= RT6_LOOKUP_F_IFACE;
 
@@ -1657,6 +1659,17 @@ void rt6_redirect(const struct in6_addr *dest, const struct in6_addr *src,
 			       "for redirect target\n");
 		goto out;
 	}
+
+#ifdef CONFIG_IPV6_MULTIPLE_TABLES
+	if (rt == net->ipv6.ip6_blk_hole_entry ||
+	    rt == net->ipv6.ip6_prohibit_entry) {
+		if (net_ratelimit())
+			printk(KERN_DEBUG "rt6_redirect: source isn't a valid" \
+			       " nexthop for redirect target " \
+			       "(blackhole or prohibited)\n");
+		goto out;
+	}
+#endif
 
 	/*
 	 *	We have finally decided to accept it.

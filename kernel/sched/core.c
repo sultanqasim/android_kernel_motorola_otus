@@ -36,6 +36,7 @@
 #include <linux/interrupt.h>
 #include <linux/capability.h>
 #include <linux/completion.h>
+#include <linux/cpufreq.h>
 #include <linux/kernel_stat.h>
 #include <linux/debug_locks.h>
 #include <linux/perf_event.h>
@@ -2909,6 +2910,9 @@ void account_user_time(struct task_struct *p, cputime_t cputime,
 
 	/* Account for user time used */
 	acct_update_integrals(p);
+
+	/* Account power usage for user time */
+	acct_update_power(p, cputime);
 }
 
 /*
@@ -2959,6 +2963,9 @@ void __account_system_time(struct task_struct *p, cputime_t cputime,
 
 	/* Account for system time used */
 	acct_update_integrals(p);
+
+	/* Account power usage for system time */
+	acct_update_power(p, cputime);
 }
 
 /*
@@ -4452,8 +4459,13 @@ recheck:
 
 	if (running)
 		p->sched_class->set_curr_task(rq);
-	if (on_rq)
-		enqueue_task(rq, p, 0);
+	if (on_rq) {
+		/*
+		 * We enqueue to tail when the priority of a task is
+		 * increased (user space view).
+		 */
+		enqueue_task(rq, p, oldprio <= p->prio ? ENQUEUE_HEAD : 0);
+	}
 
 	check_class_changed(rq, p, prev_class, oldprio);
 	task_rq_unlock(rq, p, &flags);

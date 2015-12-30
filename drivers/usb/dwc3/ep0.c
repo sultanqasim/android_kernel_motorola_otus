@@ -109,6 +109,7 @@ static int dwc3_ep0_start_trans(struct dwc3 *dwc, u8 epnum, dma_addr_t buf_dma,
 	ret = dwc3_send_gadget_ep_cmd(dwc, dep->number,
 			DWC3_DEPCMD_STARTTRANSFER, &params);
 	if (ret < 0) {
+		dbg_event(dep->number, "STTRAFL", ret);
 		dev_dbg(dwc->dev, "failed to send STARTTRANSFER command\n");
 		return ret;
 	}
@@ -302,7 +303,7 @@ void dwc3_ep0_out_start(struct dwc3 *dwc)
 
 	ret = dwc3_ep0_start_trans(dwc, 0, dwc->ctrl_req_addr, 8,
 			DWC3_TRBCTL_CONTROL_SETUP);
-	WARN_ON(ret < 0);
+	WARN_ON_ONCE(ret < 0);
 }
 
 static struct dwc3_ep *dwc3_wIndex_to_dep(struct dwc3 *dwc, __le16 wIndex_le)
@@ -891,6 +892,10 @@ static void dwc3_ep0_xfer_complete(struct dwc3 *dwc,
 		dev_vdbg(dwc->dev, "Status Phase\n");
 		dwc3_ep0_complete_status(dwc, event);
 		break;
+	case USB_REQ_SET_INTERFACE:
+		dev_vdbg(dwc->dev, "USB_REQ_SET_INTERFACE\n");
+		dwc->start_config_issued = false;
+		/* Fall through */
 	default:
 		WARN(true, "UNKNOWN ep0state %d\n", dwc->ep0state);
 	}

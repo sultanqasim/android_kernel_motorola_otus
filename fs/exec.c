@@ -954,14 +954,21 @@ static int de_thread(struct task_struct *tsk)
 		transfer_pid(leader, tsk, PIDTYPE_SID);
 
 		list_replace_rcu(&leader->tasks, &tsk->tasks);
-		delete_from_adj_tree(leader);
-		add_2_adj_tree(tsk);
 		list_replace_init(&leader->sibling, &tsk->sibling);
 
 		tsk->group_leader = tsk;
 		leader->group_leader = tsk;
 
 		tsk->exit_signal = SIGCHLD;
+		/*
+		 * need to delete leader from adj tree, because it will not be
+		 * group leader (exit_signal = -1) soon. release_task(leader)
+		 * can't delete it.
+		 */
+		spin_lock_irq(lock);
+		delete_from_adj_tree(leader);
+		add_2_adj_tree(tsk);
+		spin_unlock_irq(lock);
 		leader->exit_signal = -1;
 
 		BUG_ON(leader->exit_state != EXIT_ZOMBIE);
@@ -1266,6 +1273,9 @@ static void bprm_fill_uid(struct linux_binprm *bprm)
 	if (bprm->file->f_path.mnt->mnt_flags & MNT_NOSUID)
 		return;
 
+	if (current->no_new_privs)
+		return;
+
 	inode = bprm->file->f_path.dentry->d_inode;
 	mode = ACCESS_ONCE(inode->i_mode);
 	if (!(mode & (S_ISUID|S_ISGID)))
@@ -1308,6 +1318,13 @@ static int check_unsafe_exec(struct linux_binprm *bprm)
 		else
 			bprm->unsafe |= LSM_UNSAFE_PTRACE;
 	}
+
+	/*
+	 * This isn't strictly necessary, but it makes it harder for LSMs to
+	 * mess up.
+	 */
+	if (current->no_new_privs)
+		bprm->unsafe |= LSM_UNSAFE_NO_NEW_PRIVS;
 
 	n_fs = 1;
 	spin_lock(&p->fs->lock);

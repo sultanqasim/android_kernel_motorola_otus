@@ -764,7 +764,10 @@ int create_pkt_cmd_session_set_property(
 		struct hfi_enable *hfi;
 		pkt->rg_property_data[0] = HFI_PROPERTY_CONFIG_REALTIME;
 		hfi = (struct hfi_enable *) &pkt->rg_property_data[1];
-		hfi->enable = ((struct hfi_enable *) pdata)->enable;
+		/* firmware has inverted vaules for realtime and
+		 * non-realtime priority
+		 */
+		hfi->enable = !(((struct hfi_enable *) pdata)->enable);
 		pkt->size += sizeof(u32) * 2;
 		break;
 	}
@@ -1447,7 +1450,6 @@ int create_pkt_cmd_session_set_property(
 		hfi->ltrcount = hal->ltrcount;
 		hfi->trustmode = hal->trustmode;
 		pkt->size += sizeof(u32) + sizeof(struct hfi_ltrmode);
-		pr_err("SET LTR\n");
 		break;
 	}
 	case HAL_CONFIG_VENC_USELTRFRAME:
@@ -1461,7 +1463,6 @@ int create_pkt_cmd_session_set_property(
 		hfi->refltr = hal->refltr;
 		hfi->useconstrnt = hal->useconstrnt;
 		pkt->size += sizeof(u32) + sizeof(struct hfi_ltruse);
-		pr_err("USE LTR\n");
 		break;
 	}
 	case HAL_CONFIG_VENC_MARKLTRFRAME:
@@ -1473,7 +1474,6 @@ int create_pkt_cmd_session_set_property(
 		hfi = (struct hfi_ltrmark *) &pkt->rg_property_data[1];
 		hfi->markframe = hal->markframe;
 		pkt->size += sizeof(u32) + sizeof(struct hfi_ltrmark);
-		pr_err("MARK LTR\n");
 		break;
 	}
 	case HAL_PARAM_VENC_HIER_P_MAX_ENH_LAYERS:
